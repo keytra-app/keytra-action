@@ -1,0 +1,69 @@
+name: Keytra i18n Sync
+description: Push source JSON files, pull translations, or check localization progress against your self-hosted Keytra instance.
+author: Keytra
+
+branding:
+  icon: 'globe'
+  color: 'gray-dark'
+
+inputs:
+  url:
+    description: Base URL of your Keytra instance. Trailing slashes are trimmed.
+    required: true
+  api-key:
+    description: Project API key (ktr_...). Masked in logs.
+    required: true
+  project:
+    description: Project slug.
+    required: true
+  mode:
+    description: 'push, pull or status.'
+    required: true
+  source-path:
+    description: 'push: a JSON file, a directory or a glob. If several files match, each file name (without .json) is used as its namespace.'
+    required: false
+  namespace:
+    description: Namespace for a single-file push, or for pull.
+    required: false
+    default: default
+  namespaces:
+    description: 'pull: comma-separated namespaces. Overrides namespace.'
+    required: false
+  prune:
+    description: 'push: remove keys that are no longer in the source file.'
+    required: false
+    default: 'false'
+  locales:
+    description: 'pull: comma-separated locales. If empty, all target locales of the project are pulled.'
+    required: false
+  path-template:
+    description: 'pull: output path with {locale} and {namespace}. Defaults to locales/{locale}.json, or locales/{locale}/{namespace}.json with several namespaces.'
+    required: false
+  format:
+    description: 'pull: nested or flat.'
+    required: false
+    default: nested
+  fallback:
+    description: 'pull: value for missing translations, source or empty.'
+    required: false
+    default: source
+  indent:
+    description: 'pull: JSON indentation in spaces (0-10).'
+    required: false
+    default: '2'
+  fail-on-incomplete:
+    description: 'status: fail the step if any target locale has missing or outdated translations.'
+    required: false
+    default: 'false'
+
+outputs:
+  summary-json:
+    description: Compact JSON summary of the run.
+  changed-files:
+    description: 'pull: comma-separated list of created or modified files.'
+  has-changes:
+    description: "pull: 'true' if any file was created or modified, otherwise 'false'."
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'

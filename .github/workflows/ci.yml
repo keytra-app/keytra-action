@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: npx tsc --noEmit
+      - run: pnpm test
+      - run: pnpm build
+      - name: Check that dist/ is up to date
+        run: git diff --exit-code dist/
+
+  self-test:
+    runs-on: ubuntu-latest
+    env:
+      KEYTRA_URL: http://127.0.0.1:4010
+      # Dummy key of the mock server in test/mock-server.mts.
+      KEYTRA_API_KEY: ktr_0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Start mock server
+        run: |
+          node test/mock-server.mts 4010 > "$RUNNER_TEMP/mock.log" 2>&1 &
+          curl --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused --output /dev/null "$KEYTRA_URL"
+
+      - name: Create source files
+        run: |
+          mkdir -p tmp/en
+          echo '{"hello":"Hello"}' > tmp/en/common.json
+          echo '{"login":"Log in"}' > tmp/en/auth.json
+
+      - name: Push
+        id: push
+        uses: ./
+        with:
+          url: ${{ env.KEYTRA_URL }}/
+          api-key: ${{ env.KEYTRA_API_KEY }}
+          project: demo
+          mode: push
+          source-path: tmp/en/*.json
+
+      - name: Pull
+        id: pull
+        uses: ./
+        with:
+          url: ${{ env.KEYTRA_URL }}
+          api-key: ${{ env.KEYTRA_API_KEY }}
+          project: demo
+          mode: pull
+          path-template: tmp/out/{locale}.json
+
+      - name: Pull again
+        id: pull-again
+        uses: ./
+        with:
+          url: ${{ env.KEYTRA_URL }}
+          api-key: ${{ env.KEYTRA_API_KEY }}
+          project: demo
+          mode: pull
+          path-template: tmp/out/{locale}.json
+
+      - name: Status
+        id: status
+        uses: ./
+        with:
+          url: ${{ env.KEYTRA_URL }}
+          api-key: ${{ env.KEYTRA_API_KEY }}
+          project: demo
+          mode: status
+
+      - name: Status must fail on incomplete translations
+        id: incomplete
+        continue-on-error: true
+        uses: ./
+        with:
+          url: ${{ env.KEYTRA_URL }}
+          api-key: ${{ env.KEYTRA_API_KEY }}
+          project: demo
+          mode: status
+          fail-on-incomplete: true
+
+      - name: Verify results
+        env:
+          PUSH: ${{ steps.push.outputs.summary-json }}
+          CHANGED: ${{ steps.pull.outputs.has-changes }}
+          FILES: ${{ steps.pull.outputs.changed-files }}
+          CHANGED_AGAIN: ${{ steps.pull-again.outputs.has-changes }}
+          STATUS: ${{ steps.status.outputs.summary-json }}
+          INCOMPLETE: ${{ steps.incomplete.outcome }}
+        run: |
+          test "$(jq .totals.added <<< "$PUSH")" = 2
+          test "$CHANGED" = true
+          test "$FILES" = "tmp/out/de.json,tmp/out/fr.json"
+          test "$CHANGED_AGAIN" = false
+          jq -e .greeting.hello tmp/out/de.json
+          test "$(jq -r '.incomplete[0]' <<< "$STATUS")" = fr
+          test "$INCOMPLETE" = failure
+
+      - name: Mock server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/mock.log"
