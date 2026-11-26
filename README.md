@@ -10,7 +10,7 @@ The official GitHub Action for [Keytra](https://github.com/keytra-app/keytra), t
 
 ## Workflows
 
-### 1. Auto-push on main
+### 1. Auto-push on master
 
 Uploads the source strings whenever they change.
 
@@ -19,7 +19,7 @@ name: Keytra push
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths: ['locales/en.json']
   workflow_dispatch:
 
